@@ -1,0 +1,90 @@
+---
+title: "cookie damage"
+date: "2022-12-06"
+output: html_document
+---
+
+set workspace
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# SET WORKING DIRECTORY HERE
+setwd("path/to/your/desired/working_directory")
+
+# libraries
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(RColorBrewer)
+library(tidyr)
+library(tidyverse)
+library(mgcv)
+library(ggpubr)
+library(multcompView)
+library(FSA)
+library(rcompanion)
+library(multcomp)
+library(betareg)
+
+# cookie damage data (iron range stem damage > data > cookie_damage)
+cookie <- read.csv("MEE_repo/data/cookie_damage.csv")
+
+# cookie master  (iron range stem damage > data > cookies_master)
+main <- read.csv("MEE_repo/data/cookie_all.csv")
+```
+
+restructure data
+```{r}
+# data structure - cookie damage
+cookie$perc_hollow <- (cookie$hollowed_area / cookie$undamaged_area)*100
+cookie$perc_rot <- (cookie$rotted_area / cookie$undamaged_area)*100
+cookie$field_ID <- as.factor(cookie$field_ID)
+cookie$tree_ID <- as.factor(cookie$tree_ID)
+cookie$tree <- sub("\\-.*", "", cookie$field_ID)
+cookie <- cookie %>% relocate(tree, .after = field_ID)
+cookie$position <- sub('.*-', '', cookie$field_ID)
+cookie <- cookie %>% relocate(position, .after = tree)
+cookie$position <- as.factor(cookie$position) 
+
+# cookie damage - adding binary columns for damage, all_dam category
+cookie$hollowed <- ifelse(cookie$perc_hollow > 0.00, 'y', 'n')
+cookie$rotted <- ifelse(cookie$perc_rot > 0.00, 'y', 'n')
+cookie$damaged <- ifelse(cookie$hollowed == 'y' | cookie$rotted == 'y', 'y', 'n')
+cookie$all_dam <-  cookie$perc_hollow + cookie$perc_rot
+
+# data structure - cookie master
+main$tree_ID <- paste(main$tree, main$firebreak, sep = "_")
+main <- main %>% relocate(tree_ID, .after = field_ID)
+main$field_ID <- as.factor(main$field_ID)
+main$tree_ID <- as.factor(main$tree_ID)
+main$cutpoint <- as.factor(main$cutpoint)
+main$species <- as.factor(main$species)
+
+# damaged cookie dataframe: filter out trees with <1 point of damage
+# group by tree ID 
+# if all entries are 0 for all_dam within a tree, remove from list
+tree_d <- aggregate(cookie$all_dam, list(cookie$tree_ID), FUN=mean) 
+colnames(tree_d) <- c("tree_ID", "all_dam")
+tree_d <- tree_d[tree_d$all_dam >0,]
+cookie_d <- subset(cookie, tree_ID %in% tree_d$tree_ID)
+```
+
+summary statistics 
+```{r}
+# frequency of damage
+freq <- cookie_d %>%
+  group_by(position) %>%
+  summarise(total_cookies = length(all_dam), frequency = sum(all_dam>0))
+freq$perc_dam_total <- freq$frequency/freq$total_cookies
+
+# extend of damage
+extent <- cookie_d %>%
+  group_by(position) %>%
+  summarise(mean = mean(all_dam), sd = sd(all_dam))
+
+damage_summary <- left_join(freq, extent, by = "position")
+order <- c("S", "C", "A", "BR2", "BR3", "BR4", "BR5")
+damage_summary <- damage_summary %>%
+  slice(match(order, position))
+```
+

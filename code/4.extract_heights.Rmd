@@ -1,0 +1,102 @@
+---
+title: "6.extract_heights"
+author: "abbey yatsko"
+date: "2023-06-13"
+output: html_document
+---
+libraries
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(rcompanion)
+library(lme4)
+library(easystats)
+```
+
+load data
+```{r}
+# SET WORKING DIRECTORY HERE
+setwd("path/to/your/desired/working_directory")
+
+# damaged cookie data 
+load("MEE_repo/R/data_out/cookie_d.RData")
+cookie <- cookie_d
+# tree level info 
+load("MEE_repo/R/data_out/trees.RData")
+```
+
+functions 
+```{r}
+# function to find height of cookie based on TLS model 
+find_heights <- function(names, cyl_mods, cookie){
+  # list item name - ply_model
+  ply_model <- names
+  # define tree base
+  tree_base <- cyl_mods$z[1]
+  # difference between z coordinate and tree base (height) 
+  cyl_mods$height_m <- cyl_mods$z - tree_base
+  # calculate tree diameter (cm) from radius
+  cyl_mods$diam_cm <- (cyl_mods$radius*2)*100
+  
+  # filter cookies for ply model 
+  df <- cookie[cookie$ply_model %in% ply_model, ]
+  
+  # extract height info
+  diams <- df$diameter_cm
+  
+  # closest diameter in the model for each cookie
+  y  <- NULL;
+  for (i in diams) {
+    target.index <- which(abs(cyl_mods$diam_cm - i) == min(abs(cyl_mods$diam_cm - i)))
+    tmp <- cyl_mods$diam_cm[target.index]
+    y <- rbind(y, tmp)
+  }
+  
+  out <- cbind(df, y)
+  colnames(out)[26] = "closest_diam"
+  
+  heights <- cyl_mods[,c("diam_cm", "height_m")]
+  
+  # calculate % height in tree (0% as bottom, 100% as top)
+  tree_top <- max(cyl_mods$height_m)
+  heights$relative_height <- (heights$height_m / tree_top)*100
+  
+  out2 <- left_join(out, heights, by = c("closest_diam" = "diam_cm"))
+  
+  return(out2)
+}
+```
+
+organize tree cylinder models 
+```{r}
+files <- list.files("MEE_repo/data/by_cylinder_damage_out", full.names = TRUE, pattern = ".csv", recursive = TRUE)
+cyl_mods <- lapply(files, read.csv)
+# pull out model from file name 
+x <- lapply(files, function(x) new_str <- gsub('MEE_repo/data/by_cylinder_damage_out/','', x))
+names <- lapply(x, function(x) new_str <- gsub('.csv','', x))
+
+# match file name to tree_ID
+names(cyl_mods) <- names
+
+# paste models into cookie sheet 
+# get models names 
+trees <- trees[,c("tree_id", "ply_model")]
+cookie <- left_join(cookie, trees, by = c("tree_ID" = "tree_id"))
+```
+
+find heights of each cookie
+```{r}
+cookie_heights_added <- lapply(seq_along(cyl_mods), function(x) find_heights(names[[x]], cyl_mods[[x]], cookie))
+
+# output: append all individual tree cookie files back to one cookie list 
+cookie_heights_added_out <- do.call(rbind,lapply(cookie_heights_added, data.frame))
+
+# preliminary figure for damage by relative height (0% = bottom of tree, 100% = top of tree)
+ggplot(cookie_heights_added_out, aes(x = all_dam, y = relative_height))+
+  geom_point()+
+  geom_smooth(method = "loess", se = F)+
+  theme_classic()+
+  xlab("Cross section damage (%)")+
+  ylab("Relative height in tree (%)")
+```
