@@ -1,0 +1,91 @@
+---
+title: "3.trees_processing"
+date: "2023-05-31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# SET WORKING DIRECTORY HERE
+setwd("path/to/your/desired/working_directory")
+```
+
+libraries 
+```{r}
+library(dplyr)
+library(tidyr)
+```
+
+data load and process
+```{r}
+trees_all <- read.csv("MEE_repo/data/Iron_Range_Stem_Damage_master_Mar_02_23.xlsx - all (1).csv")
+
+# choose relevant working columns 
+trees <- trees_all[c("tree_id","ply_model", "species", "dbh_observed_cm_tidy", "stump_ABG_dry_weight_kg", "new_cyl_vol_HFB_L", "dry_density_published", "paul_2016_type_c", "paul_2013_universal_dbh_c", "brown_c", "willams_woodland_c", "chave_lit_dens_c_kg", "chave_scaled_dens_c_kg", "TLS_ABG_dry_lit_dens_kg", "TLS_est_ABG_dry_scaled_kg", "obs_ABG_dry_kg")]
+
+# remove trees that did not model, fix stump missing values to 0
+trees <- trees %>% drop_na(obs_ABG_dry_kg)
+trees$stump_ABG_dry_weight_kg[is.na(trees$stump_ABG_dry_weight_kg)] <- 0
+
+# fill in missing diameters with those from TLS (from original main data sheet)
+trees[17,4] <- 22.30 # Test
+trees[29,4] <- 6.18 # Tess1_lower
+trees[53,4] <- 5.14 # Planch11_upper
+trees[56,4] <- 5.48 # Planch12_upper
+
+# merge in field-measured species level density measurements
+load("MEE_repo/R/data_out/field_wd_species.RData")
+
+trees <- left_join(trees, field_wd_species, by=c('tree_id', 'species'))
+trees <- trees %>% relocate(wd_species_level_field, .after = dry_density_published)
+trees <- trees %>% relocate(sd, .after = wd_species_level_field)
+trees <- trees %>% relocate(species, .after = ply_model)
+
+# Timonius timon missing field measured wood density (only 1 replicate, sub in literature wood density value)
+trees[34,8] <-0.551
+```
+
+ASM dry biomass 
+```{r}
+# Williams woodland
+# Eqn from excel: = EXP(-2.2111 + 2.4831*LN(DBH) + (0.05682^2)/2) - STUMP
+# Eqn from table: 5a = EXP(-2.2111 + 2.4831*LN(DBH))
+trees$williams <- exp(-2.2111 + 2.4831*log(trees$dbh_observed_cm_tidy) + (0.05682^2)/2) - trees$stump_ABG_dry_weight_kg
+  
+# Paul 2016
+# Eqn from excel: = EXP(-2.016 + 2.375*LN(DBH) + (0.04199^2)/2) - STUMP
+# Eqn from table: FEuc = EXP(2.016 + 2.375*LN(DBH)*1.067)
+#                 FOther-H = EXP(1.693 + 2.220*LN(DBH)*1.044)
+#                 FOther-L = EXP(2.573 + 2.460*LN(DBH)*1.018)
+trees$paul2016 <- exp(-2.016 + 2.375*log(trees$dbh_observed_cm_tidy) + (0.04199^2)/2) - trees$stump_ABG_dry_weight_kg
+  
+# Paul 2013 
+# Eqn from excel: = EXP(-1.82 + 2.27*LN(DBH) + (0.03416^2)/2) - STUMP
+# Eqn from table: Universal tree <100 cm = EXP(-1.82 + 2.27 * LN(DBH)
+trees$paul2013 <- exp(-1.82 + 2.27*log(trees$dbh_observed_cm_tidy) + (0.03416^2)/2) - trees$stump_ABG_dry_weight_kg
+
+# Brown 
+# Eqn from excel: = EXP(-1.996 + 2.32*LN(DBH) + (0.03534^2)/2) - STUMP
+# Eqn from table: Equation 3.2.1 = EXP(-1.996 + 2.32 * LN(DBH))
+trees$brown <- exp(-1.996 + 2.32*log(trees$dbh_observed_cm_tidy) + (0.03534^2)/2) - trees$stump_ABG_dry_weight_kg
+
+# Chave 
+# Eqn from excel: = EXP(-1.803 - 0.976*0.3687456 + 0.976*LN(WSG) + 2.673*LN(DBH) - 0.0299*(LN(DBH)^2) + (0.03644^2)/2) - STUMP
+# Eqn from table: Equation 7 = EXP(-1.803 - 0.976*E + 0.976*LN(wood specific gravity) + 2.673*LN(DBH) - 0.0299*(LN(DBH)2)
+
+# apply literature wood density - species level 
+trees$chave_L <- exp(-1.803 - 0.976*0.3687456 + 0.976*log(trees$dry_density_published) + 2.673*log(trees$dbh_observed_cm_tidy) - 0.0299*(log(trees$dbh_observed_cm_tidy)^2) + (0.03644^2)/2) - trees$stump_ABG_dry_weight_kg
+
+# apply field  wood density - species level 
+trees$chave_F <-  exp(-1.803 - 0.976*0.3687456 + 0.976*log(trees$wd_species_level_field) + 2.673*log(trees$dbh_observed_cm_tidy) - 0.0299*(log(trees$dbh_observed_cm_tidy)^2) + (0.03644^2)/2) - trees$stump_ABG_dry_weight_kg
+```
+
+TLS dry biomass
+```{r}
+# TLS AGB based on updated literature wood density 
+trees$TLS_L <- trees$new_cyl_vol_HFB_L*trees$dry_density_published
+
+# TLS AGB based on updated field measure tree-level dry wood density 
+trees$TLS_F <- trees$new_cyl_vol_HFB_L*trees$wd_species_level_field
+```

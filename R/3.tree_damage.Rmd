@@ -1,0 +1,236 @@
+---
+title: "scaled_damage"
+date: "2023-02-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# SET WORKING DIRECTORY HERE
+setwd("path/to/your/desired/working_directory")
+```
+
+library
+```{r}
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(RColorBrewer)
+library(tidyr)
+library(tidyverse)
+library(mgcv)
+library(stringr) 
+library(ggpmisc)
+library(easystats)
+library(lme4)
+library(FSA)
+library(rcompanion)
+library(rstatix)
+library(broom)
+library(ggeffects)
+```
+
+functions 
+```{r}
+# function to extract lm parameters from each individual tree (hollowing and rot)
+damage_mod_param <- function(x){
+  # tree/model
+  tree_ID <- x$tree_ID[1]
+  ply_model <- x$ply_model[1]
+  species <- x$species[1]
+  
+  # hollow damage relationship
+  mod_hol <- lm(perc_hollow ~ diameter_cm, data = x)
+  r2_hol <- summary(mod_hol)$r.squared 
+  p_hol <- anova(mod_hol)$'Pr(>F)'[1]
+  mod_param_hol <- data.frame(t(coef(mod_hol)))
+  colnames(mod_param_hol)[1] ="intercept_hol"
+  colnames(mod_param_hol)[2] ="slope_hol"
+  mod_param_hol$r2_hol <- r2_hol
+  mod_param_hol$p_hol <- p_hol
+  
+  # rot damage relationship
+  mod_rot <- lm(perc_rot ~ diameter_cm, data = x)
+  r2_rot <- summary(mod_rot)$r.squared 
+  p_rot <- anova(mod_rot)$'Pr(>F)'[1]
+  mod_param_rot <- data.frame(t(coef(mod_rot)))
+  colnames(mod_param_rot)[1] ="intercept_rot"
+  colnames(mod_param_rot)[2] ="slope_rot"
+  mod_param_rot$r2_rot <- r2_rot
+  mod_param_rot$p_rot <- p_rot
+  
+  # all damage relationship
+  mod_alld <- lm(all_dam ~ diameter_cm, data = x)
+  r2_alld <- summary(mod_alld)$r.squared 
+  p_alld <- anova(mod_alld)$'Pr(>F)'[1]
+  mod_param_alld <- data.frame(t(coef(mod_alld)))
+  colnames(mod_param_alld)[1] ="intercept_alld"
+  colnames(mod_param_alld)[2] ="slope_alld"
+  mod_param_alld$r2_alld <- r2_alld
+  mod_param_alld$p_alld <- p_alld
+  
+  out <- cbind(mod_param_hol, mod_param_rot, mod_param_alld)
+  mod_param <- data.frame(tree_ID, ply_model, species, out)
+  
+  return(mod_param)
+}
+
+# function to predict damage from applying cylinder model distribution (for both overall damage and cylinder-by-cylinder)
+damage_predict <- function(mod, cyl){
+  # tree/model
+  tree_ID <- mod$tree_ID[1]
+  ply_model <- mod$ply_model[1]
+  species <- mod$species[1]
+  
+  # damage equation for hollowing 
+  damage_hol <- as.vector(((mod$slope_hol)*(cyl$radius*2*100))+(mod$intercept_hol))
+  
+  # damage equation for rot 
+  damage_rot <- as.vector(((mod$slope_rot)*(cyl$radius*2*100))+(mod$intercept_rot))
+  
+  # make negative values equal to zero 
+  damage_hol <- pmax(damage_hol,0)
+  damage_rot <- pmax(damage_rot,0)
+  
+  # merge in damage proportion
+  df <- cbind(cyl, damage_hol, damage_rot)
+  
+  # calculate volume cylinder 
+  df$vol_cyl <- pi*((df$radius)^2)*(df$length)
+  
+  # apply proportion damaged to cylinder to find damaged volume (hollowing and rot)
+  df$vol_cyl_d_hol <- (df$vol_cyl)*(df$damage_hol*.01)
+  df$vol_cyl_d_rot <- (df$vol_cyl)*(df$damage_rot*.01)
+  df$col_cyl_d_all <- df$vol_cyl_d_hol + df$vol_cyl_d_rot
+  
+  # total cylinder volume (undamaged)
+  total_vol_cyl <- sum(df$vol_cyl)
+  
+  # total cylinder volume (damaged)
+  total_vol_cyl_d_hol <- sum(df$vol_cyl_d_hol)
+  total_vol_cyl_d_rot <- sum(df$vol_cyl_d_rot)
+  
+  # overall proportion of tree damaged 
+  damage_scaled_hol <- (total_vol_cyl_d_hol / total_vol_cyl)*100
+  damage_scaled_rot <- (total_vol_cyl_d_rot / total_vol_cyl)*100
+  damage_scaled_tot <- ((total_vol_cyl_d_hol + total_vol_cyl_d_rot) / total_vol_cyl)*100
+  
+  overall_damage <- data.frame(tree_ID, ply_model, species, damage_scaled_hol, damage_scaled_rot, damage_scaled_tot)
+
+  # for outputting overall tree damage estimates
+  return(overall_damage)
+}
+
+# model to output damage by each cylinder within each model
+damage_predict_by_cyl <- function(mod, cyl){
+  # tree/model
+  tree_ID <- mod$tree_ID[1]
+  ply_model <- mod$ply_model[1]
+  species <- mod$species[1]
+  
+  # damage equation for hollowing 
+  damage_hol <- as.vector(((mod$slope_hol)*(cyl$radius*2*100))+(mod$intercept_hol))
+  
+  # damage equation for rot 
+  damage_rot <- as.vector(((mod$slope_rot)*(cyl$radius*2*100))+(mod$intercept_rot))
+  
+  # make negative values equal to zero 
+  damage_hol <- pmax(damage_hol,0)
+  damage_rot <- pmax(damage_rot,0)
+  
+  # merge in damage proportion
+  df <- cbind(cyl, damage_hol, damage_rot)
+  
+  # calculate volume cylinder 
+  df$vol_cyl <- pi*((df$radius)^2)*(df$length)
+  
+  # apply proportion damaged to cylinder to find damaged volume (hollowing and rot)
+  df$vol_cyl_d_hol <- (df$vol_cyl)*(df$damage_hol*.01)
+  df$vol_cyl_d_rot <- (df$vol_cyl)*(df$damage_rot*.01)
+  df$col_cyl_d_all <- df$vol_cyl_d_hol + df$vol_cyl_d_rot
+  
+  # total cylinder volume (undamaged)
+  total_vol_cyl <- sum(df$vol_cyl)
+  
+  # total cylinder volume (damaged)
+  total_vol_cyl_d_hol <- sum(df$vol_cyl_d_hol)
+  total_vol_cyl_d_rot <- sum(df$vol_cyl_d_rot)
+  
+  # overall proportion of tree damaged 
+  damage_scaled_hol <- (total_vol_cyl_d_hol / total_vol_cyl)*100
+  damage_scaled_rot <- (total_vol_cyl_d_rot / total_vol_cyl)*100
+  damage_scaled_tot <- ((total_vol_cyl_d_hol + total_vol_cyl_d_rot) / total_vol_cyl)*100
+  
+  overall_damage <- data.frame(tree_ID, ply_model, species, damage_scaled_hol, damage_scaled_rot, damage_scaled_tot)
+
+  # to output individual cylinder damage
+  return(df)
+}
+```
+
+data load - cookies 
+```{r setup, include=FALSE}
+# cookie damage data 
+load("MEE_repo/R/data_out/cookie_d.RData")
+cookie <- cookie_d
+
+# master iron range df (use for joining tree ID and cylinder models)
+main <- read.csv("MEE_repo/data/Iron_Range_Stem_Damage_master_Mar_02_23.xlsx - all (1).csv")
+main <- main[c("tree_id", "ply_model")]
+colnames(main)[1] <- "tree_ID"
+
+# join cookie and master sheet to merge in cylinder model name
+cookie <- left_join(cookie, main, by = c("tree_ID"))
+
+# remove cookies without a model 
+cookie <- cookie[!(cookie$ply_model==""), ]
+cookie <- cookie[!(cookie$ply_model=="Seed planted; did not model second time"), ]
+
+# create seperate df for hollow and rot data - calculating scaled damage
+working_dam <- cookie[c("tree_ID", "ply_model", "position", "species", "perc_hollow","perc_rot", "all_dam", "diameter_cm")]
+
+# remove trees with <3 points of damage measured 
+agg_df <- aggregate(working_dam$tree_ID, by=list(working_dam$ply_model), FUN=length)
+remove <- agg_df[agg_df$x < 3,]
+remove_trees <- remove$Group.1
+working_dam <- working_dam %>% filter(!ply_model %in% remove_trees)
+
+# create list of trees by model including individual cookie measurements 
+dam_list <- split(working_dam, working_dam$ply_model)
+select_trees <- names(dam_list)
+```
+
+data load - cylinders 
+```{r}
+# process cylinder data to apply scaled model
+files <- list.files("MEE_repo/data/cylinders", full.names = TRUE, pattern = ".csv", recursive = TRUE)
+cyl_dat <- lapply(files, read.csv)
+
+# pull out model from file name 
+x <- lapply(files, function(x) new_str <- gsub('MEE_repo/data/cylinders/','', x))
+x <- lapply(x, function(x) new_str <- gsub('.csv','', x))
+x <- lapply(x, function(x) new_str <- gsub('.qsm','', x))
+
+# match file name to tree_ID
+names(cyl_dat) <- x
+
+# filter out cylinder models that are in hol/rot list generated from cookies 
+matched_cyl <- cyl_dat[select_trees]
+```
+
+tree level damage based on damage~size relationship applied to cylinder model
+```{r}
+# apply to list of trees for hollowing 
+all_mod_param <- lapply(seq_along(dam_list), function(x) damage_mod_param(dam_list[[x]]))
+mod_param <- do.call(rbind, all_mod_param)
+
+# apply damage_predict to each cylinder for each tree model 
+dam_scaled_list <- lapply(seq_along(matched_cyl), function(x) damage_predict(all_mod_param[[x]], matched_cyl[[x]]))
+names(dam_scaled_list) <- names(matched_cyl)
+dam_scaled <- do.call(rbind,lapply(dam_scaled_list, data.frame))
+
+colnames(dam_scaled)[4] ="mu_hol_scaled"
+colnames(dam_scaled)[5] ="mu_rot_scaled"
+colnames(dam_scaled)[6] ="mu_tot_scaled"
+```

@@ -1,0 +1,516 @@
+---
+title: "Untitled"
+date: "2023-05-31"
+output: html_document
+---
+
+library
+```{r}
+library(dplyr)
+library(viridis)
+library(rcompanion)
+library(glmmTMB)
+library(DescTools)
+library(lmtest)
+library(dplyr)
+library(ggeffects)
+library(forcats)
+library(tidyverse)
+library(lme4)
+library(ggpubr)
+library(ggpmisc)
+library(easystats)
+library(car)
+library(glmmTMB)
+library(report) 
+library(ggplot2)
+```
+
+load data
+```{r}
+# SET WORKING DIRECTORY HERE
+setwd("path/to/your/desired/working_directory")
+# all cookies
+load("MEE_repo/R/data_out/cookie.RData")
+# damaged cookies
+load("MEE_repo/R/data_out/cookie_d.RData")
+# cookie main sheet
+load("MEE_repo/R/data_out/main.RData")
+# tree damage
+load("MEE_repo/R/data_out/tree_level_damage.RData")
+# tree biomass main sheet (trees)
+trees <- read.csv("MEE_repo/R/data_out/all_trees_ex2fixed.csv")
+# damaged cookies with height in tree
+load("MEE_repo/R/data_out/cookie_heights_added_out.RData")
+# tree biomass
+data <- as.data.frame(read.csv("all_trees_Abbey_June.csv"))
+```
+
+Figure 4. total AGB plot
+```{r}
+# Paul2013 scatterplot
+(paul2013 <- ggplot(data, aes(x = obs_ABG_dry_kg, y = paul2013)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,3100) +
+   ylim(0,3100) +
+   xlab("AGB (kg)") +
+   ylab("Paul 2013 ASM (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+(paul2013_inset <- ggplot(data, aes(x = obs_ABG_dry_kg, y = paul2013)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,300) +
+   ylim(0,300) +
+   xlab("AGB (kg)") +
+   ylab("Paul 2013 ASM (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+#Chave2014 scatterplot field densities
+(chave2014 <- ggplot(data, aes(x = obs_ABG_dry_kg, y = chave_F)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,3100) +
+   ylim(0,3100) +
+   xlab("AGB (kg)") +
+   ylab("Chave 2014 ASM (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+(chave2014_inset <- ggplot(data, aes(x = obs_ABG_dry_kg, y = chave_F)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,300) +
+   ylim(0,300) +
+   xlab("AGB (kg)") +
+   ylab("Chave 2014 ASM (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+# TLS scatterplot field densities 
+(TLS <- ggplot(data, aes(x = obs_ABG_dry_kg, y = TLS_F)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,3100) +
+   ylim(0,3100) +
+   xlab("AGB (kg)") +
+   ylab("TLS modelled weights (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+(TLS_inset <- ggplot(data, aes(x = obs_ABG_dry_kg, y = TLS_F)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,300) +
+   ylim(0,300) +
+   xlab("AGB (kg)") +
+   ylab("TLS modelled weights (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+# comparison of all ASM/TLS to baseline value of observed biomass 
+trees_total <- trees[c("paul2016", "paul2013", "brown", "williams", "chave_F", "TLS_F","chave_L", "TLS_L","obs_ABG_dry_kg")]
+
+sums <- data.frame(colSums(trees_total, na.rm = TRUE))
+sums$mod <- rownames(sums)
+colnames(sums)[1] = "estimate"
+sums$baseline_difference <- sums$estimate - sums[9,1]
+sums$percent_difference <- (sums$baseline_difference/(sums[9,1]))*100
+
+# plot of ASM/TLS difference from baseline (field-measured) as %
+AGBb <- ggplot(sums, aes(x = mod, y = percent_difference,  fill = mod)) + 
+  geom_bar(stat = "identity")+
+  ylab("% difference from field-measured AGB")+
+  xlab("")+
+  scale_x_discrete(limits=c("chave_F", "TLS_F", "paul2016", "paul2013", "brown", "williams", "chave_L", "TLS_L"),
+                   labels=c("Chave (field p)", "TLS (field p)","Paul 2016", "Paul 2013", "Brown 1997",  "Williams 2005", "Chave (DB p)", "TLS (DB p)"))+
+  theme_classic()+
+  theme(legend.position = "Spectral")+ 
+  geom_hline(yintercept=0, linetype="dashed", color = "red")+
+  ggtitle("b)")+
+  scale_fill_viridis(discrete = TRUE)
+
+```
+
+Table 1. model regressions (ASM and TLS)
+```{r}
+#Williams
+reg <- lm(formula = williams ~ obs_ABG_dry_kg,
+   data=data)
+summary(reg)
+
+#Brown
+reg <- lm(formula = brown ~ obs_ABG_dry_kg,
+   data=data)
+summary(reg)
+
+#Paul2013
+reg <- lm(formula = paul2013 ~ obs_ABG_dry_kg,
+   data=data)
+summary(reg)
+
+# Paul2016
+reg <- lm(formula = paul2016 ~ obs_ABG_dry_kg,
+   data=data)
+summary(reg)
+
+#Chave2014
+reg <- lm(formula = chave_F ~ obs_ABG_dry_kg,
+   data=data)
+summary(reg)
+
+#TLS
+reg <- lm(formula = TLS_F ~ obs_ABG_dry_kg,
+   data=data)
+summary(reg)
+```
+
+Figure 5. damage throughout tree plot
+```{r}
+# convert to proportion
+cookie_d$all_dam_prop <- cookie_d$all_dam/(100) 
+
+# reorder positions to correct levels
+cookie_d <- cookie_d %>% mutate(position = fct_relevel(position, c("S", "C", "A", "BR2", "BR3", "BR4", "BR5")))%>%
+  mutate(nondmg = 1 - all_dam_prop)
+
+cookie_heights_added_out <- cookie_heights_added_out %>%
+  mutate(nondmg_area = cross_section_area - area_dam_cm2)
+
+# fix one negative height 
+cookie_heights_added_out$height_m <- ifelse(cookie_heights_added_out$height_m < 0, 0, cookie_heights_added_out$height_m)
+cookie_heights_added_out$relative_height_prop <- cookie_heights_added_out$relative_height/100
+cookie_heights_added_out$relative_height_prop <- ifelse(cookie_heights_added_out$relative_height_prop < 0, 0, cookie_heights_added_out$relative_height_prop)
+
+# model
+log.model <-lmer(log(all_dam+1) ~ relative_height + (1|tree_ID), cookie_heights_added_out) # best 
+summary(log.model)
+Anova(log.model)
+
+# visualization 
+height_fig <- ggpredict(log.model, terms = c("relative_height")) %>% plot(add.data = TRUE)
+height_fig <- height_fig+
+  coord_flip()
+
+predicted_height <- ggpredict(log.model,terms = c("relative_height"),)
+ggplot(cookie_heights_added_out, aes(x = relative_height, y = all_dam, color=position)) + 
+  geom_jitter() +
+  geom_line(aes(x=x, y=predicted), data=predicted_height, inherit.aes=FALSE)+
+  theme_classic()+
+  scale_color_viridis(limits=c("S", "C", "A", "BR2", "BR3", "BR4", "BR5"), labels = c("C1", "C2", "C3", "C4", "C5", "C6", "C7"), discrete = TRUE, direction = 1)+
+  xlim(0,100)+
+  coord_flip()
+```
+
+Figure 6. damage residual plot 
+```{r}
+# merge damage and trees 
+dam_scaled_sub <- dam_scaled[c("ply_model", "mu_hol_scaled", "mu_rot_scaled", "mu_tot_scaled")]
+trees_damage <- left_join(trees, dam_scaled_sub, by = "ply_model")
+trees_damage$mu_hol_scaled[is.na(trees_damage$mu_hol_scaled)] <- 0
+trees_damage$mu_rot_scaled[is.na(trees_damage$mu_rot_scaled)] <- 0
+trees_damage$mu_tot_scaled[is.na(trees_damage$mu_tot_scaled)] <- 0
+trees_damage$damaged <- ifelse(trees_damage$mu_tot_scaled>0, "Y", "N")
+trees_damage$residuals <- trees_damage$TLS_F-trees_damage$obs_ABG_dry_kg
+
+# TLS - plot relationship between damage % and residuals
+dam_TLS <- ggplot(trees_damage[trees_damage$damaged=="Y",], aes(x = mu_tot_scaled, y = residuals/obs_ABG_dry_kg, size = dbh_observed_cm_tidy))+
+  geom_point(alpha = 0.25)+
+ # geom_smooth(method = "lm" )+
+  geom_hline(yintercept=0, linetype="dashed", color = "red")+
+  theme_classic()+
+  xlab("Tree-level damage (%)")+
+  ylab("Difference between TLS and field measured AGB (kg), normalized for size")+
+  ggtitle("b)")+
+  ylim(-1.5, 3)
+
+trees_damage$residuals_scaled <- trees_damage$residuals/trees_damage$obs_ABG_dry_kg
+mod.tls <- lm((residuals_scaled)~mu_tot_scaled*dbh_observed_cm_tidy, data = trees_damage[trees_damage$damaged=="Y",])
+summary(mod.tls)
+
+dam_tls <- ggpredict(mod.tls, terms = c("mu_tot_scaled", "dbh_observed_cm_tidy")) %>% plot(add.data = TRUE) # with raw data color by size
+dam_tls <- dam_tls + 
+  ylim(-1.5, 3)+
+  ggtitle("a)")
+
+sm <- "#fce725"
+med <- '#20908c'
+lg <- '#440153'
+v <- c(13, 27, 40)
+predicted_residuals_tls <- ggpredict(mod.tls,terms = c("mu_tot_scaled", "dbh_observed_cm_tidy [v]"),)
+
+fig6a <-ggplot(trees_damage[trees_damage$damaged=="Y",], aes(x = mu_tot_scaled, y = residuals/obs_ABG_dry_kg, size = dbh_observed_cm_tidy)) + 
+  geom_jitter(alpha = 0.25) +
+  geom_line(aes(x=x, y=predicted), data=filter(predicted_residuals_tls, group=='13'), 
+            inherit.aes=FALSE, colour=sm) + 
+  geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), data=filter(predicted_residuals_tls, group=='13'), 
+              inherit.aes=FALSE, alpha=0.2, fill = sm)+
+  geom_line(aes(x=x, y=predicted), data=filter(predicted_residuals_tls, group=='27'), 
+            inherit.aes=FALSE, colour=med) + 
+  geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), data=filter(predicted_residuals_tls, group=='27'), 
+              inherit.aes=FALSE, alpha=0.2, fill = med)+
+  geom_line(aes(x=x, y=predicted), data=filter(predicted_residuals_tls, group=='40'), 
+            inherit.aes=FALSE, colour=lg) + 
+  geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), data=filter(predicted_residuals_tls, group=='40'), 
+              inherit.aes=FALSE, alpha=0.2, fill = lg)+
+  theme_classic()+
+  ylim(-1.5, 3)+
+  geom_hline(yintercept=0, linetype="dashed", color = "red")+
+  ggtitle("a)")
+
+# ASM - plot relationship between damage % and residuals
+# calculate ASM residuals
+trees_damage$residuals_ASM <- trees_damage$chave_F-trees_damage$obs_ABG_dry_kg
+
+dam_ASM <- ggplot(trees_damage[trees_damage$damaged=="Y",], aes(x = mu_tot_scaled, y = residuals_ASM/obs_ABG_dry_kg, size = dbh_observed_cm_tidy ))+
+  geom_point(alpha = 0.25)+
+  geom_hline(yintercept=0, linetype="dashed", color = "red")+
+  theme_classic()+
+  xlab("Tree-level damage (%)")+
+  ylab("Difference between ASM and field measured AGB (kg), normalized for size")+
+  ggtitle("d")+
+  ylim(-1.5, 3)
+
+mod.asm <- lm((residuals_ASM/obs_ABG_dry_kg)~mu_tot_scaled*dbh_observed_cm_tidy, data = trees_damage[trees_damage$damaged=="Y",])
+summary(mod.asm)
+
+# plot(mod.asm)
+dam_asm <- ggpredict(mod.asm, terms = c("mu_tot_scaled", "dbh_observed_cm_tidy")) %>% plot(add.data = TRUE)
+
+predicted_residuals_asm <- ggpredict(mod.asm,terms = c("mu_tot_scaled", "dbh_observed_cm_tidy [v]"),)
+
+fig6b <- ggplot(trees_damage[trees_damage$damaged=="Y",], aes(x = mu_tot_scaled, y = residuals_ASM/obs_ABG_dry_kg, size = dbh_observed_cm_tidy)) + 
+  geom_jitter(alpha = 0.25) +
+  geom_line(aes(x=x, y=predicted), data=filter(predicted_residuals_asm, group=='13'), 
+            inherit.aes=FALSE, colour=sm) + 
+  geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), data=filter(predicted_residuals_asm, group=='13'), 
+              inherit.aes=FALSE, alpha=0.2, fill = sm)+
+  geom_line(aes(x=x, y=predicted), data=filter(predicted_residuals_asm, group=='27'), 
+            inherit.aes=FALSE, colour=med) + 
+  geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), data=filter(predicted_residuals_asm, group=='27'), 
+              inherit.aes=FALSE, alpha=0.2, fill = med)+
+  geom_line(aes(x=x, y=predicted), data=filter(predicted_residuals_asm, group=='40'), 
+            inherit.aes=FALSE, colour=lg) + 
+  geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), data=filter(predicted_residuals_asm, group=='40'), 
+              inherit.aes=FALSE, alpha=0.2, fill = lg)+
+  theme_classic()+
+  ylim(-1.5, 3)+
+  geom_hline(yintercept=0, linetype="dashed", color = "red")+
+  ggtitle("b)")
+  
+ggarrange(fig6a,fig6b, ncol = 2, legend = "right", common.legend = TRUE)
+```
+
+Supplementary Figure 1. all model biomass figures (excluding Paul2013, Chave and TLS using field wd from fig1)
+```{r}
+#Williams2005 scatterplot
+(williams <- ggplot(data, aes(x = obs_ABG_dry_kg, y = williams)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,3100) +
+   ylim(0,3100) +
+   xlab("AGB (kg)") +
+   ylab("Williams 2005 ASM (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+(williams_inset <- ggplot(data, aes(x = obs_ABG_dry_kg, y = williams)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,300) +
+   ylim(0,300) +
+   xlab("AGB (kg)") +
+   ylab("Williams 2005 ASM (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+#Brown scatterplot
+(brown <- ggplot(data, aes(x = obs_ABG_dry_kg, y = brown)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,3100) +
+   ylim(0,3100) +
+   xlab("AGB (kg)") +
+   ylab("Brown 1997 ASM (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+(Brown_inset <- ggplot(data, aes(x = obs_ABG_dry_kg, y = brown)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,300) +
+   ylim(0,300) +
+   xlab("AGB (kg)") +
+   ylab("Brown 1997 ASM (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+#Paul2016 scatterplot
+(paul16 <- ggplot(data, aes(x = obs_ABG_dry_kg, y = paul2016)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,3100) +
+   ylim(0,3100) +
+   xlab("AGB (kg)") +
+   ylab("Paul 2016 ASM (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+(paul16_inset <- ggplot(data, aes(x = obs_ABG_dry_kg, y = paul2016)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,300) +
+   ylim(0,300) +
+   xlab("AGB (kg)") +
+   ylab("Paul 2016 ASM (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+#Chave2014 scatterplot w/ published densities
+(chave2014_L <- ggplot(data, aes(x = obs_ABG_dry_kg, y = chave_L)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,3500) +
+   ylim(0,3500) +
+   xlab("AGB (kg)") +
+   ylab("Chave 2014 ASM reference pwood (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+(chave2014_L_inset <- ggplot(data, aes(x = obs_ABG_dry_kg, y = chave_L)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,300) +
+   ylim(0,300) +
+   xlab("AGB (kg)") +
+   ylab("Chave 2014 ASM ref pwood (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+#TLS scatterplot w published densities
+(TLS_L <- ggplot(data, aes(x = obs_ABG_dry_kg, y = TLS_L)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,3500) +
+   ylim(0,3500) +
+   xlab("AGB (kg)") +
+   ylab("TLS modelled weights ref pwood (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+
+(TLS_inset <- ggplot(data, aes(x = obs_ABG_dry_kg, y = TLS_L)) + 
+   geom_abline(alpha = 0.5, linetype = 4) + 
+   geom_point(alpha = 0.3) +
+   theme_classic() +
+   xlim(0,300) +
+   ylim(0,300) +
+   xlab("AGB (kg)") +
+   ylab("TLS modelled weights ref pwood (kg)")) +
+   stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth",
+              colour="black")
+```
+
+Supplementary Figure 2. density scatterplot
+```{r}
+(densities <- ggplot(data, aes(x = dry_density_published, y = wd_species_level_field, color = species)) + 
+   geom_abline(alpha = 0.5, linetype = 2) + 
+   geom_point(size = 2.5, stroke = 0.3) +
+   theme_classic() +
+   xlim(0.4,1.05) +
+   ylim(0.4,1.05) +
+   xlab("Global Wood Density Database (Zanne et al. 2009)") +
+   ylab("Species mean field specific gravity"))
+```
+
+Supplementary Figure 4. tree size distribution 
+```{r}
+# all trees 
+alltree <- ggplot(trees, aes(dbh_observed_cm_tidy)) +
+  geom_bar() +
+  scale_x_binned()+ 
+  theme_classic()+
+  ylim(0,22)+
+  xlab("DBH (cm)")+
+  ylab("Number of Individuals")
+  
+# just damamged trees 
+damtree <- ggplot(trees_damage[trees_damage$damaged=="Y",], aes(dbh_observed_cm_tidy)) +
+  geom_bar() +
+  scale_x_binned()+ 
+  theme_classic()+
+  ylim(0,22)+
+  xlab("DBH (cm)")+
+  ylab("Number of Individuals")
+ggarrange(alltree, damtree)
+```
+
+Supplementary Figure 5. undamaged trees - size relationship with residuals
+```{r}
+aa <- ggplot(trees_damage[trees_damage$damaged=="N",], aes(x = dbh_observed_cm_tidy, y = residuals/obs_ABG_dry_kg)) +
+  geom_point()+
+  theme_classic()+
+  xlab("DBH (cm)")+
+  ylab("Difference between TLS and field measured AGB (kg), normalized for size")+
+  ggtitle("a)")+
+  ylim(0, 2)
+
+ab <- ggplot(trees_damage[trees_damage$damaged=="N",], aes(x = dbh_observed_cm_tidy, y = residuals_ASM/obs_ABG_dry_kg)) +
+  geom_point()+
+  theme_classic()+
+  xlab("DBH (cm)")+
+  ylab("Difference between ASM and field measured AGB (kg), normalized for size")+
+  ggtitle("b)")+
+  ylim(0, 2)
+
+ggarrange(aa, ab, nrow = 1)
+```
