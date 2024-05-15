@@ -234,3 +234,21 @@ colnames(dam_scaled)[4] ="mu_hol_scaled"
 colnames(dam_scaled)[5] ="mu_rot_scaled"
 colnames(dam_scaled)[6] ="mu_tot_scaled"
 ```
+
+total L and kg of damage 
+```{r}
+data <- as.data.frame(read.csv("MEE_repo/data/all_trees_Abbey_June.csv"))
+merged_df <- left_join(data, dam_scaled, by = c("ply_model", "species"))
+merged_df$mu_tot_scaled <- ifelse(is.na(merged_df$mu_tot_scaled), 0, merged_df$mu_tot_scaled)
+
+# damaged volume 
+merged_df$L_damaged <- merged_df$TLS_F * (merged_df$mu_tot_scaled/100)
+sum(merged_df$L_damaged)
+
+# damaged kg 
+merged_df$kg_damaged <- merged_df$L_damaged * merged_df$wd_species_level_field
+sum(merged_df$kg_damaged)
+
+# total plot biomass 
+sum(merged_df$obs_ABG_dry_kg)
+```
