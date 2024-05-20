@@ -5,3 +5,5 @@ This repository contains the data and R code to reproduce all analyses of our pa
 All code is inside the R directory.
 
 Link to point cloud data is [here](https://drive.google.com/drive/folders/1XF-kAGMHvTAYylvzFrhhmI0Bsz5-Ifmi?usp=sharing).
+
+[![DOI](https://zenodo.org/badge/799993336.svg)](https://zenodo.org/doi/10.5281/zenodo.11223162)
